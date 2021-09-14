@@ -94,7 +94,7 @@ class Brain(IBrain):
         non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
                                               batch.next_state)), device=device, dtype=torch.bool) # non_final_mask: tensor([True, True, True, False, ...]) size(32)
         non_final_next_states = torch.cat([s for s in batch.next_state
-                                                    if s is not None]) # size(32-None num,4)
+                                                    if s is not None]).to(device) # size(32-None num,4)
         assert non_final_mask.size() == (self.BATCH_SIZE,)
         #print(non_final_next_states.size())
         #assert non_final_next_states.size() == (self.BATCH_SIZE,self.num_states)
@@ -268,6 +268,7 @@ class Trainer(ITrainer):
         self.writer = SummaryWriter(self.log_dir)
         
     def train(self, train_param):
+        train_start = time.time()
         for episode_i in range(train_param.num_episode):
             state = self.env.reset()
             #state = torch.from_numpy(state).type(torch.FloatTensor)  # numpy変数をPyTorchのテンソルに変換
@@ -331,7 +332,8 @@ class Trainer(ITrainer):
         fn = "./results/{}/{}_{}.pth".format(self.id, train_param.save_filename, episode_i+1)
         self.agent.record(fn)
         print('Saved model! Name: {}'.format(fn))
-        print('Completed!')
+        elapsed_time = time.time() - train_start
+        print('Completed!, Time: {}'.format(elapsed_time))
         #self.plot_durations()
         
         
