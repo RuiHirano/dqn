@@ -72,9 +72,9 @@ class Brain(IBrain):
         ''' batch化する '''
         transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
-        state_batch = torch.cat(batch.state) # state: tensor([[0.5, 0.4, 0.5, 0], ...]) size(32, 4)
-        action_batch = torch.cat(batch.action) # action: tensor([[1],[0],[0]...]) size(32, 1) 
-        reward_batch = torch.cat(batch.reward) # reward: tensor([1, 1, 1, 0, ...]) size(32)
+        state_batch = torch.cat(batch.state).to(device) # state: tensor([[0.5, 0.4, 0.5, 0], ...]) size(32, 4)
+        action_batch = torch.cat(batch.action).to(device) # action: tensor([[1],[0],[0]...]) size(32, 1) 
+        reward_batch = torch.cat(batch.reward).to(device) # reward: tensor([1, 1, 1, 0, ...]) size(32)
         #next_state_batch = torch.cat(batch.next_state) # next_state: tensor([[0.5, 0.4, 0.5, 0], ...]) size(32, 4)
         #assert state_batch.size() == (self.BATCH_SIZE,self.num_states) # TODO: fix assertion
         #assert next_state_batch.size() == (self.BATCH_SIZE,self.num_states)
