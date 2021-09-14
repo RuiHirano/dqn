@@ -12,7 +12,10 @@ import copy
 from itertools import count
 import time
 import matplotlib.pyplot as plt
-from .replay_memory import Transition, IReplayMemory
+import datetime
+from .replay_memory import Transition
+from .interface import IAgent, IBrain, IExaminer, IReplayMemory, ITrainer
+from torch.utils.tensorboard import SummaryWriter
 
 # if gpu is to be used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -20,36 +23,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #################################
 #####        Brain         ######
 #################################
-
-class IBrain(metaclass=ABCMeta):
-    @abstractmethod
-    def optimize(self):
-        '''Q関数の最適化'''
-        pass
-    @abstractmethod
-    def update_target_model(self):
-        '''Target Networkの更新'''
-        pass
-    @abstractmethod
-    def memorize(self, state, action, next_state, reward):
-        '''ReplayMemoryへの保存'''
-        pass
-    @abstractmethod
-    def decide_action(self):
-        '''行動の決定'''
-        pass
-    @abstractmethod
-    def save_model(self):
-        '''modelの保存'''
-        pass
-    @abstractmethod
-    def read_model(self):
-        '''modelの保存'''
-        pass
-    @abstractmethod
-    def predict(self):
-        '''推論'''
-        pass
 
 class BrainParameter(NamedTuple):
     batch_size: int
@@ -63,7 +36,7 @@ class BrainParameter(NamedTuple):
     num_multi_step_bootstrap: int = 5
 
 class Brain(IBrain):
-    def __init__(self, param, num_states, num_actions):
+    def __init__(self, param, num_actions):
         self.steps_done = 0
 
         # muti-step bootstrap
@@ -84,7 +57,6 @@ class Brain(IBrain):
         
         #print(self.model) # ネットワークの形を出力
         self.num_actions = num_actions
-        self.num_states = num_states
         #print(self.num_observ)
         self.policy_net = copy.deepcopy(param.net).to(device)
         self.target_net = copy.deepcopy(param.net).to(device)
@@ -236,36 +208,6 @@ class Brain(IBrain):
 #####        Agent         ######
 #################################
 
-class IAgent(metaclass=ABCMeta):
-    @abstractmethod
-    def learn(self):
-        '''Q関数の更新'''
-        pass
-    @abstractmethod
-    def modify_target(self):
-        '''Target Networkの更新'''
-        pass
-    @abstractmethod
-    def select_action(self):
-        '''行動の決定'''
-        pass
-    @abstractmethod
-    def memorize(self):
-        '''memoryに、state, action, state_next, rewardの内容を保存'''
-        pass
-    @abstractmethod
-    def predict_action(self):
-        '''行動の予測'''
-        pass
-    @abstractmethod
-    def record(self):
-        '''モデルの保存'''
-        pass
-    @abstractmethod
-    def remember(self):
-        '''モデルの読み込み'''
-        pass
-
 class Agent(IAgent):
     def __init__(self, brain: IBrain):
         '''エージェントが行動を決定するための頭脳を生成'''
@@ -306,23 +248,27 @@ class Agent(IAgent):
 #####        Trainer         ######
 #################################
 
-class ITrainer(metaclass=ABCMeta):
-    @abstractmethod
-    def train(self):
-        '''訓練'''
-        pass
-    
+
+class TrainParameter(NamedTuple):
+    target_update_iter: int
+    num_episode : int
+    save_iter: int
+    save_filename: str
+    render: bool
+
 
 class Trainer(ITrainer):
-    def __init__(self, env, agent):
+    def __init__(self, id, env, agent):
+        self.id = id
         self.env = env
         self.agent = agent
         self.loss_durations = []
         self.episode_durations = []
-        self.TARGET_UPDATE = 20
+        self.log_dir = "results/{}".format(self.id)
+        self.writer = SummaryWriter(self.log_dir)
         
-    def train(self, episode_num, save_dir="./model_params", file_name="model_weight", save_iter=20, render=True):
-        for episode_i in range(episode_num):
+    def train(self, train_param):
+        for episode_i in range(train_param.num_episode):
             state = self.env.reset()
             #state = torch.from_numpy(state).type(torch.FloatTensor)  # numpy変数をPyTorchのテンソルに変換
             #state = torch.unsqueeze(state, 0)
@@ -330,7 +276,7 @@ class Trainer(ITrainer):
             start = time.time()
             sum_loss = 0
             for step in count():
-                if render:
+                if train_param.render:
                     self.env.render()
 
                 ''' 行動を決定する '''
@@ -356,36 +302,37 @@ class Trainer(ITrainer):
                 loss = self.agent.learn()
                 if loss != None:
                     sum_loss += loss
-                    self.loss_durations.append(loss)
 
                 if done:
                     elapsed_time = time.time() - start
                     ''' 終了時に結果をプロット '''
                     #print(loss, episode_i)
                     print("Episode: {}, Step: {}, Loss: {}, Time: {} [sec]".format(episode_i, step, sum_loss/step, "{:.2f}".format(elapsed_time)))
-                    self.episode_durations.append(step + 1)
+                    #self.episode_durations.append(step + 1)
+                    self.writer.add_scalar('reward', step+1, episode_i)
+                    self.writer.add_scalar('training loss',sum_loss/step, episode_i)
 
                     
                     # 次のエピソードへ
                     break
             # Update the target network, copying all weights and biases in DQN
-            if episode_i % self.TARGET_UPDATE == 0:
+            if episode_i % train_param.target_update_iter == 0:
                 ''' 目標を修正する '''
                 print("Episode: {}, Update Target Net".format(episode_i))
                 self.agent.modify_target()
 
-            if episode_i % save_iter == save_iter-1:
-                fn = "{}/{}_{}.pth".format(save_dir, file_name, episode_i+1)
+            if episode_i % train_param.save_iter == train_param.save_iter-1:
+                fn = "./results/{}/{}_{}.pth".format(self.id, train_param.save_filename, episode_i+1)
                 self.agent.record(fn)
                 print('Saved model! Name: {}'.format(fn))
 
         ''' モデルを保存する '''
         # モデルの保存
-        fn = "{}/{}_{}.pth".format(save_dir, file_name, episode_i+1)
+        fn = "./results/{}/{}_{}.pth".format(self.id, train_param.save_filename, episode_i+1)
         self.agent.record(fn)
         print('Saved model! Name: {}'.format(fn))
         print('Completed!')
-        self.plot_durations()
+        #self.plot_durations()
         
         
     def plot_durations(self):
@@ -407,12 +354,6 @@ class Trainer(ITrainer):
 #################################
 #####        Examiner      ######
 #################################
-
-class IExaminer(metaclass=ABCMeta):
-    @abstractmethod
-    def evaluate(self):
-        '''評価'''
-        pass
 
 class Examiner():
     def __init__(self, env, agent):

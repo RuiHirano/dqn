@@ -12,6 +12,7 @@ import copy
 from itertools import count
 import time
 import matplotlib.pyplot as plt
+from .interface import IReplayMemory, Transition
 
 # if gpu is to be used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -19,23 +20,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #################################
 #####     Replay Memory    ######
 #################################
-
-Transition = namedtuple('Transition',
-                        ('state', 'action', 'next_state', 'reward'))
-                        
-class IReplayMemory(metaclass=ABCMeta):
-    @abstractmethod
-    def push(self, transition: Transition):
-        '''データの挿入'''
-        pass
-    @abstractmethod
-    def sample(self, batch_size):
-        '''データの抽出'''
-        pass
-    @abstractmethod
-    def update(self, state_action_values, expected_state_action_values):
-        '''なにかしらの処理'''
-        pass
 
 class ReplayMemory(IReplayMemory):
  
