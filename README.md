@@ -53,3 +53,10 @@ You can result by tensorboard
 tensorboard --logdir results/20210914165555
 ```
 result is created at results/YYYYMMDDHHMMSS/
+
+
+## for Docker
+```
+docker-compose up -d
+docker exec -it dqn_breakout bash
+```

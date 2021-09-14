@@ -8,16 +8,12 @@ from typing import NamedTuple
 from gym import spaces
 from gym.spaces.box import Box
 from PIL import Image
-from torchvision.transforms.transforms import Grayscale
-import matplotlib.pyplot as plt
 
 # if gpu is to be used
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 #################################
 #####      Environment     ######
 #################################
-import cv2
-cv2.ocl.setUseOpenCL(False)
 class NoopResetEnv(gym.Wrapper):
     def __init__(self, env, noop_max=30):
         '''工夫1のNo-Operationです。リセット後適当なステップの間何もしないようにし、
@@ -118,9 +114,12 @@ class WarpFrame(gym.ObservationWrapper):
         self.observation_space = spaces.Box(low=0, high=255, shape=(self.height, self.width, 1), dtype=np.uint8)
 
     def observation(self, frame):
-        frame = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
-        frame = cv2.resize(frame, (self.width, self.height), interpolation=cv2.INTER_AREA)
-        return frame[:, :, None]
+        transform = T.Compose([T.ToPILImage(),T.Grayscale(),
+                    T.Resize((self.width, self.height), interpolation=Image.CUBIC),
+                    T.ToTensor()])
+        observation = torch.from_numpy(frame.transpose(2,0,1).astype(np.float32)).clone()
+        observation = transform(observation).unsqueeze(0)
+        return observation
 
 class WrapPyTorch(gym.ObservationWrapper):
     def __init__(self, env=None):
@@ -152,7 +151,7 @@ class BreakoutEnv(gym.Wrapper):
         self.env = MaxAndSkipEnv(self.env, skip=4)
         self.env = EpisodicLifeEnv(self.env)
         self.env = WarpFrame(self.env)
-        self.env = WrapPyTorch(self.env)
+        #self.env = WrapPyTorch(self.env)
         
     def reset(self):
         observation = self.env.reset() # (210, 160, 3) (h,w,c)
