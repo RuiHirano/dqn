@@ -3,8 +3,6 @@ import sys
 sys.path.append('./../')
 from lib.dqn import Trainer, Examiner, Brain, Agent, BrainParameter, TrainParameter
 from lib.replay_memory import ReplayMemory, PrioritizedReplayMemory
-from lib.env.cartpole import CartpoleEnv
-from lib.env.breakout import BreakoutEnv
 from lib.util import Color
 color = Color()
 import yaml
